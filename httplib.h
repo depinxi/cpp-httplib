@@ -707,9 +707,37 @@ protected:
   size_t payload_max_length_ = CPPHTTPLIB_PAYLOAD_MAX_LENGTH;
 
 private:
-  using Handlers = std::vector<std::pair<std::regex, Handler>>;
+  using Handlers = std::vector<std::tuple<std::string, std::regex, Handler>>;
   using HandlersForContentReader =
-      std::vector<std::pair<std::regex, HandlerWithContentReader>>;
+      std::vector<std::tuple<std::string, std::regex, HandlerWithContentReader>>;
+
+  Server &insert_route(Handlers& handlers, const std::string &pattern, Handler handler) {
+    for (auto &h : handlers) {
+      const std::string &p = std::get<0>(h);
+      if (p == pattern) {
+        std::get<2>(h) = std::move (handler);
+        return (*this);
+      }
+    }
+    handlers.push_back(
+      std::make_tuple(pattern, std::regex(pattern), std::move(handler)));
+    return *this;
+  }
+
+  Server &insert_route(HandlersForContentReader& handlers,
+		       const std::string &pattern,
+		       HandlerWithContentReader handler) {
+    for (auto &h : handlers) {
+      const std::string &p = std::get<0>(h);
+      if (p == pattern) {
+	std::get<2>(h) = std::move (handler);
+	return (*this);
+      }
+    }
+    handlers.push_back(
+      std::make_tuple(pattern, std::regex(pattern), std::move(handler)));
+    return *this;
+  }
 
   socket_t create_server_socket(const char *host, int port, int socket_flags,
                                 SocketOptions socket_options) const;
@@ -4715,67 +4743,47 @@ inline Server::Server()
 inline Server::~Server() {}
 
 inline Server &Server::Get(const std::string &pattern, Handler handler) {
-  get_handlers_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(get_handlers_, pattern, handler);
 }
 
 inline Server &Server::Post(const std::string &pattern, Handler handler) {
-  post_handlers_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(post_handlers_, pattern, handler);
 }
 
 inline Server &Server::Post(const std::string &pattern,
                             HandlerWithContentReader handler) {
-  post_handlers_for_content_reader_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(post_handlers_for_content_reader_, pattern, handler);
 }
 
 inline Server &Server::Put(const std::string &pattern, Handler handler) {
-  put_handlers_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(put_handlers_, pattern, handler);
 }
 
 inline Server &Server::Put(const std::string &pattern,
                            HandlerWithContentReader handler) {
-  put_handlers_for_content_reader_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(put_handlers_for_content_reader_, pattern, handler);
 }
 
 inline Server &Server::Patch(const std::string &pattern, Handler handler) {
-  patch_handlers_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(patch_handlers_, pattern, handler);
 }
 
 inline Server &Server::Patch(const std::string &pattern,
                              HandlerWithContentReader handler) {
-  patch_handlers_for_content_reader_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(patch_handlers_for_content_reader_, pattern, handler);
 }
 
 inline Server &Server::Delete(const std::string &pattern, Handler handler) {
-  delete_handlers_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(delete_handlers_, pattern, handler);
 }
 
 inline Server &Server::Delete(const std::string &pattern,
                               HandlerWithContentReader handler) {
-  delete_handlers_for_content_reader_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(delete_handlers_for_content_reader_, pattern, handler);
 }
 
 inline Server &Server::Options(const std::string &pattern, Handler handler) {
-  options_handlers_.push_back(
-      std::make_pair(std::regex(pattern), std::move(handler)));
-  return *this;
+  return insert_route(options_handlers_, pattern, handler);
 }
 
 inline bool Server::set_base_dir(const std::string &dir,
@@ -5457,8 +5465,8 @@ inline bool Server::routing(Request &req, Response &res, Stream &strm) {
 inline bool Server::dispatch_request(Request &req, Response &res,
                                      const Handlers &handlers) {
   for (const auto &x : handlers) {
-    const auto &pattern = x.first;
-    const auto &handler = x.second;
+    const auto &pattern = std::get<1>(x);
+    const auto &handler = std::get<2>(x);
 
     if (std::regex_match(req.path, req.matches, pattern)) {
       handler(req, res);
@@ -5582,8 +5590,8 @@ inline bool Server::dispatch_request_for_content_reader(
     Request &req, Response &res, ContentReader content_reader,
     const HandlersForContentReader &handlers) {
   for (const auto &x : handlers) {
-    const auto &pattern = x.first;
-    const auto &handler = x.second;
+    const auto &pattern = std::get<1>(x);
+    const auto &handler = std::get<2>(x);
 
     if (std::regex_match(req.path, req.matches, pattern)) {
       handler(req, res, content_reader);
