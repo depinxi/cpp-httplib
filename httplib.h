@@ -702,6 +702,8 @@ public:
   Server &Delete(const std::string &pattern, HandlerWithContentReader handler);
   Server &Options(const std::string &pattern, Handler handler);
 
+  Server &Unbind(const std::string& method, const std::string &pattern);
+
   bool set_base_dir(const std::string &dir,
                     const std::string &mount_point = std::string());
   bool set_mount_point(const std::string &mount_point, const std::string &dir,
@@ -789,6 +791,17 @@ private:
     return *this;
   }
 
+  Server &remove_route(Handlers& handlers, const std::string &pattern) {
+    for (auto h = handlers.begin(); h != handlers.end(); ++h) {
+      const std::string &p = std::get<0>(*h);
+      if (p == pattern) {
+        handlers.erase(h);
+        break;
+      }
+    }
+    return (*this);
+  }
+
   Server &insert_route(HandlersForContentReader& handlers,
 		       const std::string &pattern,
 		       HandlerWithContentReader handler) {
@@ -801,6 +814,18 @@ private:
     }
     handlers.push_back(
       std::make_tuple(pattern, std::regex(pattern), std::move(handler)));
+    return *this;
+  }
+
+  Server &remove_route(HandlersForContentReader& handlers,
+		       const std::string &pattern) {
+	for (auto h = handlers.begin(); h != handlers.end(); ++h) {
+      const std::string &p = std::get<0>(*h);
+      if (p == pattern) {
+	    handlers.erase(h);
+	    break;
+      }
+    }
     return *this;
   }
 
@@ -5213,6 +5238,27 @@ inline Server &Server::Delete(const std::string &pattern,
 
 inline Server &Server::Options(const std::string &pattern, Handler handler) {
   return insert_route(options_handlers_, pattern, handler);
+}
+
+inline Server &Server::Unbind(const std::string& method, const std::string &pattern) {
+  if (method == "GET") {
+    return remove_route (get_handlers_, pattern);
+  } else if (method == "POST") {
+	 return remove_route (post_handlers_, pattern);
+	 return remove_route (post_handlers_for_content_reader_, pattern);
+  } else if (method == "PUT") {
+	 return remove_route (put_handlers_, pattern);
+	 return remove_route (put_handlers_for_content_reader_, pattern);
+  } else if (method == "PATCH") {
+  	 return remove_route (patch_handlers_, pattern);
+  	 return remove_route (patch_handlers_for_content_reader_, pattern);
+  } else if (method == "DELETE") {
+	 return remove_route (delete_handlers_, pattern);
+	 return remove_route (delete_handlers_for_content_reader_, pattern);
+  } else if (method == "OPTIONS") {
+	 return remove_route (options_handlers_, pattern);
+  }
+  return (*this);
 }
 
 inline bool Server::set_base_dir(const std::string &dir,
